@@ -37,25 +37,29 @@ function initRepo(repoPath, repoUrl) {
  * Make N commits for a specific date
  * @param {string} repoPath - Path to the local repo
  * @param {string} date - Date string (YYYY-MM-DD)
- * @param {number} count - Number of commits to make
+ * @param {number} countToMake - Number of commits to make in this batch
+ * @param {number} totalCount - Total target commits for the day
+ * @param {number} startIndex - Starting index for this batch
  * @param {string} charLabel - Character being drawn (for commit message)
  * @param {boolean} dryRun - If true, don't actually commit
  * @returns {number} Number of commits made
  */
-function makeCommits(repoPath, date, count, charLabel = '', dryRun = false) {
+function makeCommits(repoPath, date, countToMake, totalCount = countToMake, startIndex = 0, charLabel = '', dryRun = false) {
     const artFile = path.join(repoPath, '.contribution');
     let committed = 0;
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < countToMake; i++) {
+        const globalIndex = startIndex + i;
         // Create a unique timestamp for each commit on the same day
-        const hour = String(Math.floor((i / count) * 23)).padStart(2, '0');
+        const maxHrDivisor = Math.max(1, totalCount);
+        const hour = String(Math.floor((globalIndex / maxHrDivisor) * 23)).padStart(2, '0');
         const minute = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         const second = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         const dateTime = `${date}T${hour}:${minute}:${second}`;
 
         const message = charLabel
-            ? `art: pixel for '${charLabel}' [${i + 1}/${count}]`
-            : `art: contribution ${i + 1}/${count}`;
+            ? `art: pixel for '${charLabel}' [${globalIndex + 1}/${totalCount}]`
+            : `art: contribution ${globalIndex + 1}/${totalCount}`;
 
         if (dryRun) {
             committed++;

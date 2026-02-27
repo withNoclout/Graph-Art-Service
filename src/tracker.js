@@ -63,7 +63,14 @@ function markCompleted(date, commits, dataDir = DEFAULT_DATA_DIR) {
  */
 function getPending(plan, dataDir = DEFAULT_DATA_DIR) {
     const data = loadTracker(dataDir);
-    return plan.filter(entry => !data.completed[entry.date]);
+    return plan.map(entry => {
+        const done = data.completed[entry.date] ? data.completed[entry.date].commits : 0;
+        return {
+            ...entry,
+            pendingCommits: Math.max(0, entry.commits - done),
+            doneCommits: done
+        };
+    }).filter(entry => entry.pendingCommits > 0);
 }
 
 /**

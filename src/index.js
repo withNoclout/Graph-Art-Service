@@ -228,72 +228,86 @@ async function executeCommits(config, plan) {
     // Initialize repo
     initRepo(repoPath, repoUrl);
 
-    // Get pending commits
     const dataDir = path.join(__dirname, '..', 'data');
-    const pending = getPending(plan, dataDir);
+    let batchNumber = 1;
 
-    if (pending.length === 0) {
-        console.log(chalk.green('  ✅ All commits are already completed!'));
+    while (true) {
+        const pending = getPending(plan, dataDir);
+
+        if (pending.length === 0) {
+            console.log(chalk.green('  ✅ All commits are completed!'));
+            console.log('');
+            return;
+        }
+
+        let totalPending = pending.reduce((sum, e) => sum + e.pendingCommits, 0);
+        const batchLimit = config.batchLimit > 0 ? config.batchLimit : totalPending;
+
+        console.log(chalk.cyan(`  🔄 Batch ${batchNumber} | ${totalPending} commits remaining...`));
+
+        // 1. Distribute batch limit evenly across pending dates
+        let allocatedThisBatch = 0;
+        const assignments = pending.map(p => ({ ...p, toCommitNow: 0 }));
+        let remainingToAllocate = totalPending;
+
+        while (allocatedThisBatch < batchLimit && remainingToAllocate > 0) {
+            let added = false;
+            for (let p of assignments) {
+                if (p.toCommitNow < p.pendingCommits && allocatedThisBatch < batchLimit) {
+                    p.toCommitNow++;
+                    allocatedThisBatch++;
+                    remainingToAllocate--;
+                    added = true;
+                }
+            }
+            if (!added) break;
+        }
+
+        // 2. Execute the allocated commits
+        let completedDaysThisBatch = 0;
+        const daysToProcess = assignments.filter(p => p.toCommitNow > 0).length;
+
+        for (const entry of assignments) {
+            if (entry.toCommitNow === 0) continue;
+
+            const progress = Math.round((completedDaysThisBatch / daysToProcess) * 100);
+            const bar = '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
+
+            process.stdout.write(
+                `\r  [${chalk.green(bar)}] ${progress}% | ${chalk.white(entry.date)} | '${chalk.cyan(entry.char)}' | +${entry.toCommitNow} commits`
+            );
+
+            const commitsMade = makeCommits(repoPath, entry.date, entry.toCommitNow, entry.commits, entry.doneCommits, entry.char);
+
+            // markCompleted expects the TOTAL commits done for that date so far
+            markCompleted(entry.date, entry.doneCommits + commitsMade, dataDir);
+
+            completedDaysThisBatch++;
+        }
+
+        process.stdout.write(
+            `\r  [${chalk.green('█'.repeat(20))}] 100% | ${chalk.white('Batch Done!')}${''.padEnd(30)}\n`
+        );
+
+        // 3. Push to remote
+        if (config.repoUrl) {
+            console.log(chalk.cyan('  📤 Pushing batch to remote...'));
+            const pushed = pushToRemote(repoPath);
+            if (pushed) {
+                console.log(chalk.green('  ✅ Successfully pushed batch!'));
+            } else {
+                console.log(chalk.yellow('  ⚠️  Failed to push. You can push manually: cd ' + repoPath + ' && git push'));
+            }
+        }
+
         console.log('');
-        return;
-    }
+        batchNumber++;
 
-    console.log(chalk.cyan(`  📋 ${pending.length} days remaining (${pending.reduce((s, e) => s + e.commits, 0)} commits)`));
-    console.log('');
-
-    // Process each pending date
-    let completed = 0;
-    const total = pending.length;
-    let commitsThisRun = 0;
-    const batchLimit = config.batchLimit || 0; // 0 means no limit
-    let hitLimit = false;
-
-    for (const entry of pending) {
-        if (batchLimit > 0 && commitsThisRun + entry.commits > batchLimit) {
-            console.log(`\n\n  ⏸  ${chalk.yellow('Batch limit of ' + batchLimit + ' reached.')}`);
-            console.log(chalk.gray('      Run ' + chalk.white('npm start') + ' again later to resume the remaining ' + (total - completed) + ' days.'));
-            hitLimit = true;
+        // If no limit was effectively applied, or we just finished the last bit
+        if (batchLimit >= totalPending) {
             break;
         }
-
-        const progress = Math.round((completed / total) * 100);
-        const bar = '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
-
-        process.stdout.write(
-            `\r  [${chalk.green(bar)}] ${progress}% | ${chalk.white(entry.date)} | '${chalk.cyan(entry.char)}' | ${completed}/${total}`
-        );
-
-        const commitsMade = makeCommits(repoPath, entry.date, entry.commits, entry.char);
-        markCompleted(entry.date, commitsMade, dataDir);
-        commitsThisRun += commitsMade;
-        completed++;
     }
-
-    // Final progress if completed fully
-    if (!hitLimit) {
-        process.stdout.write(
-            `\r  [${chalk.green('█'.repeat(20))}] 100% | ${chalk.white('Done!')}${''.padEnd(40)}\n`
-        );
-        console.log('');
-        console.log(chalk.green.bold(`  ✅ Completed all ${plan.reduce((s, e) => s + e.commits, 0)} commits across ${plan.length} days`));
-    } else {
-        console.log('');
-        console.log(chalk.yellow.bold(`  ⏸ Paused after ${commitsThisRun} commits across ${completed} days`));
-    }
-
-    // Push to remote
-    if (config.repoUrl) {
-        console.log('');
-        console.log(chalk.cyan('  📤 Pushing to remote...'));
-        const pushed = pushToRemote(repoPath);
-        if (pushed) {
-            console.log(chalk.green('  ✅ Successfully pushed to remote!'));
-        } else {
-            console.log(chalk.yellow('  ⚠️  Failed to push. You can push manually: cd ' + repoPath + ' && git push'));
-        }
-    }
-
-    console.log('');
 }
 
 // ─── Quick Preview Mode ─────────────────────────────────────────────
