@@ -312,6 +312,7 @@ async function previewMode() {
 
     renderGrid(grid, config.year);
     renderStats(stats);
+}
 
 // ─── Plan Mode ──────────────────────────────────────────────────────
 async function planMode() {
@@ -346,6 +347,7 @@ async function planMode() {
 
     console.log('');
     renderStats(stats);
+}
 
 // ─── Run Mode (non-interactive, uses saved config) ──────────────────
 async function runMode() {
