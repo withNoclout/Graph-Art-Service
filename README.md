@@ -119,19 +119,15 @@ Shows the preview based on your saved config without making any commits.
 
 ### Plan Mode
 
-```bash
-npm run plan
-```
+### Other Commands
 
-Shows a detailed list of every date and how many commits will be made.
-
-### Run Mode (Non-interactive)
-
-```bash
-npm run run
-```
-
-Executes commits using your saved config. Useful for background service mode.
+| Command | Description |
+|---|---|
+| `npm run preview` | Show preview based on saved config without making commits |
+| `npm run plan` | Show detailed commit schedule |
+| `npm run run` | Execute commits non-interactively |
+| `npm run reset` | Delete tracking data, config, repo, and restart from scratch |
+| `npm run service:install` | Install as background service |
 
 ### Help
 
