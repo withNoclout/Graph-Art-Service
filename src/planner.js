@@ -48,12 +48,15 @@ function formatDate(date) {
  * @param {number} year - Target year
  * @param {number} commitsPerPixel - Number of commits per filled pixel (default 20)
  * @param {number} startWeek - Week offset to start drawing (default 0)
+ * @param {number|null} globalBackgroundLevel - The target total commits for background padding (e.g. 45)
+ * @param {Object} scrapedExisting - Existing commits scraped from GitHub { 'YYYY-MM-DD': count }
  * @returns {Array<{date: string, commits: number, char: string, row: number, col: number}>}
  */
-function generatePlan(text, year, commitsPerPixel = 20, startWeek = 0) {
+function generatePlan(text, year, commitsPerPixel = 20, startWeek = 0, globalBackgroundLevel = null, scrapedExisting = {}) {
+    // Generate text pixels first
     const graphStart = getGraphStartDate(year);
     const upperText = text.toUpperCase();
-    const plan = [];
+    const textPlanMap = new Map(); // Store text pixels by date
 
     let currentWeek = startWeek;
 
@@ -90,9 +93,9 @@ function generatePlan(text, year, commitsPerPixel = 20, startWeek = 0) {
 
                     // Only include dates within the target year
                     if (date.getFullYear() === year) {
-                        plan.push({
+                        textPlanMap.set(dateStr, {
                             date: dateStr,
-                            commits: commitsPerPixel,
+                            isText: true,
                             char: charKey,
                             row,
                             col: currentWeek + col,
@@ -103,6 +106,48 @@ function generatePlan(text, year, commitsPerPixel = 20, startWeek = 0) {
         }
 
         currentWeek += charWidth + 1; // +1 for gap between characters
+    }
+
+    const plan = [];
+
+    // If globalBackgroundLevel is set, we need to iterate over all 365 days
+    if (globalBackgroundLevel !== null) {
+        const startDate = new Date(year, 0, 1);
+        const endDate = new Date(year, 11, 31);
+
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const dateStr = formatDate(d);
+            const existing = scrapedExisting[dateStr] || 0;
+            const textEntry = textPlanMap.get(dateStr);
+
+            // Calculate total target for this day
+            // Background day: needs to reach globalBackgroundLevel
+            // Text day: needs to reach globalBackgroundLevel + commitsPerPixel
+            const targetLevel = textEntry ? (globalBackgroundLevel + commitsPerPixel) : globalBackgroundLevel;
+
+            const neededCommits = Math.max(0, targetLevel - existing);
+
+            if (neededCommits > 0) {
+                plan.push({
+                    date: dateStr,
+                    commits: neededCommits,
+                    char: textEntry ? textEntry.char : 'bg',
+                    row: textEntry ? textEntry.row : -1,
+                    col: textEntry ? textEntry.col : -1,
+                });
+            }
+        }
+    } else {
+        // No background padding, just use the text pixels
+        for (const [dateStr, entry] of textPlanMap.entries()) {
+            plan.push({
+                date: entry.date,
+                commits: commitsPerPixel,
+                char: entry.char,
+                row: entry.row,
+                col: entry.col,
+            });
+        }
     }
 
     // Sort by date

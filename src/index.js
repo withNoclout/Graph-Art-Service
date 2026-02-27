@@ -16,22 +16,17 @@ const chalk = require('chalk');
 const path = require('path');
 const fs = require('fs');
 const { FONT, getMaxStandardChars } = require('./fonts');
-const { generatePlan, buildGrid, getPlanStats } = require('./planner');
-const { renderGrid, renderStats } = require('./renderer');
+const {
+    generatePlan,
+    buildGrid,
+    getPlanStats
+} = require('./planner');
+const { renderGrid, renderStats, printBanner } = require('./renderer');
 const { initRepo, makeCommits, pushToRemote } = require('./committer');
 const { loadTracker, saveTracker, markCompleted, getPending, resetTracker } = require('./tracker');
+const { scrapeContributions } = require('./scraper');
 
-// ─── Banner ──────────────────────────────────────────────────────────
-function printBanner() {
-    console.log('');
-    console.log(chalk.hex('#26a641').bold('  ╔══════════════════════════════════════════╗'));
-    console.log(chalk.hex('#26a641').bold('  ║                                          ║'));
-    console.log(chalk.hex('#26a641').bold('  ║') + chalk.white.bold('   🎨 GitHub Contribution Graph Art      ') + chalk.hex('#26a641').bold('║'));
-    console.log(chalk.hex('#26a641').bold('  ║') + chalk.gray('   Draw text on your GitHub profile       ') + chalk.hex('#26a641').bold('║'));
-    console.log(chalk.hex('#26a641').bold('  ║                                          ║'));
-    console.log(chalk.hex('#26a641').bold('  ╚══════════════════════════════════════════╝'));
-    console.log('');
-}
+const CONFIG_FILE = path.join(process.cwd(), 'config.json');
 
 // ─── Available Characters Display ────────────────────────────────────
 function showAvailableChars() {
@@ -176,8 +171,48 @@ async function interactiveMode() {
         },
     ]);
 
+    // Step 8: Solid Background
+    const { useSolidBg } = await inquirer.prompt([
+        {
+            type: 'confirm',
+            name: 'useSolidBg',
+            message: chalk.cyan('Do you want a Solid Background? (This will pad all 365 days to make text pop):'),
+            default: existingConfig?.useSolidBg || false,
+        }
+    ]);
+
+    let githubUsername = '';
+    let globalBackgroundLevel = null;
+    let scrapedExisting = {};
+
+    if (useSolidBg) {
+        const res = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'githubUsername',
+                message: chalk.cyan('Enter your GitHub username (to analyze existing commits):'),
+                default: existingConfig?.githubUsername || '',
+                validate: (input) => input.trim() !== '' ? true : 'Username is required',
+            }
+        ]);
+        githubUsername = res.githubUsername.trim();
+
+        // Perform scraping
+        try {
+            const scrapeResult = await scrapeContributions(githubUsername, year);
+            scrapedExisting = scrapeResult.days;
+            // Base level: Max commits found + small buffer (e.g. 3) to ensure solid cover
+            globalBackgroundLevel = scrapeResult.maxCommits + 3;
+            console.log(chalk.green(`  ℹ️  Found max ${scrapeResult.maxCommits} commits/day. Setting background baseline to ${globalBackgroundLevel}.`));
+        } catch (err) {
+            console.log(chalk.yellow(`  ⚠️  Failed to fetch existing data: ${err.message}`));
+            console.log(chalk.yellow('  Proceeding with a default baseline of 35 commits.'));
+            globalBackgroundLevel = 35;
+        }
+    }
+
     // Generate plan and show preview
-    const plan = generatePlan(text.trim(), year, commitsPerPixel, startWeek);
+    const plan = generatePlan(text.trim(), year, commitsPerPixel, startWeek, globalBackgroundLevel, scrapedExisting);
     const grid = buildGrid(plan);
     const stats = getPlanStats(plan);
 
@@ -210,6 +245,10 @@ async function interactiveMode() {
         batchLimit,
         repoPath,
         repoUrl,
+        useSolidBg,
+        githubUsername,
+        globalBackgroundLevel,
+        scrapedExisting
     };
     saveConfig(config);
 
@@ -375,7 +414,7 @@ async function runMode() {
 
     console.log(chalk.cyan(`  🔄 Running with saved config: "${config.text}" (${config.year})`));
 
-    const plan = generatePlan(config.text, config.year, config.commitsPerPixel, config.startWeek);
+    const plan = generatePlan(config.text, config.year, config.commitsPerPixel, config.startWeek, config.globalBackgroundLevel, config.scrapedExisting);
     await executeCommits(config, plan);
 }
 
