@@ -1,0 +1,33 @@
+{
+    "name": "graph-art-service",
+    "version": "1.0.0",
+    "description": "🎨 Draw text art on your GitHub contribution graph with automated commits",
+    "main": "src/index.js",
+    "bin": {
+        "graph-art": "src/index.js"
+    },
+    "scripts": {
+        "start": "node src/index.js",
+        "preview": "node src/index.js --preview",
+        "plan": "node src/index.js --plan",
+        "run": "node src/index.js --run",
+        "service:install": "node src/service-installer.js install",
+        "service:uninstall": "node src/service-installer.js uninstall",
+        "service:status": "node src/service-installer.js status"
+    },
+    "keywords": [
+        "github",
+        "contribution",
+        "graph",
+        "art",
+        "pixel"
+    ],
+    "license": "MIT",
+    "engines": {
+        "node": ">=16.0.0"
+    },
+    "dependencies": {
+        "chalk": "^4.1.2",
+        "inquirer": "^8.2.6"
+    }
+}
