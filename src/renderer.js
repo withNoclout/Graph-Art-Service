@@ -8,6 +8,18 @@ const chalk = require('chalk');
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// ─── Banner ──────────────────────────────────────────────────────────
+function printBanner() {
+    console.log('');
+    console.log(chalk.hex('#26a641').bold('  ╔══════════════════════════════════════════╗'));
+    console.log(chalk.hex('#26a641').bold('  ║                                          ║'));
+    console.log(chalk.hex('#26a641').bold('  ║') + chalk.white.bold('   🎨 GitHub Contribution Graph Art      ') + chalk.hex('#26a641').bold('║'));
+    console.log(chalk.hex('#26a641').bold('  ║') + chalk.gray('   Draw text on your GitHub profile       ') + chalk.hex('#26a641').bold('║'));
+    console.log(chalk.hex('#26a641').bold('  ║                                          ║'));
+    console.log(chalk.hex('#26a641').bold('  ╚══════════════════════════════════════════╝'));
+    console.log('');
+}
+
 /**
  * Render a colored block based on commit intensity
  */
@@ -100,4 +112,4 @@ function renderGridPlain(grid) {
     return lines.join('\n');
 }
 
-module.exports = { renderGrid, renderStats, renderGridPlain };
+module.exports = { renderGrid, renderStats, renderGridPlain, printBanner };
