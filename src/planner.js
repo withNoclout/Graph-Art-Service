@@ -140,13 +140,19 @@ function generatePlan(text, year, commitsPerPixel = 20, startWeek = 0, globalBac
     } else {
         // No background padding, just use the text pixels
         for (const [dateStr, entry] of textPlanMap.entries()) {
-            plan.push({
-                date: entry.date,
-                commits: commitsPerPixel,
-                char: entry.char,
-                row: entry.row,
-                col: entry.col,
-            });
+            const existing = scrapedExisting[dateStr] || 0;
+            const targetLevel = commitsPerPixel;
+            const neededCommits = Math.max(0, targetLevel - existing);
+
+            if (neededCommits > 0) {
+                plan.push({
+                    date: entry.date,
+                    commits: neededCommits,
+                    char: entry.char,
+                    row: entry.row,
+                    col: entry.col,
+                });
+            }
         }
     }
 

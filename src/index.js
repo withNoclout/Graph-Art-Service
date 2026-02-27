@@ -26,6 +26,8 @@ const { initRepo, makeCommits, pushToRemote } = require('./committer');
 const { loadTracker, saveTracker, markCompleted, getPending, resetTracker } = require('./tracker');
 const { scrapeContributions } = require('./scraper');
 
+require('dotenv').config();
+
 const CONFIG_FILE = path.join(process.cwd(), 'config.json');
 
 // ─── Available Characters Display ────────────────────────────────────
@@ -109,7 +111,7 @@ async function interactiveMode() {
     ]);
 
     // Step 3: Commits per pixel
-    const { commitsPerPixel } = await inquirer.prompt([
+    let { commitsPerPixel } = await inquirer.prompt([
         {
             type: 'number',
             name: 'commitsPerPixel',
@@ -128,7 +130,8 @@ async function interactiveMode() {
             type: 'number',
             name: 'startWeek',
             message: chalk.cyan('Start from week (0 = beginning of year):'),
-            default: existingConfig?.startWeek || 1,
+            default: existingConfig?.startWeek !== undefined ? existingConfig.startWeek :
+                (process.env.DEFAULT_START_WEEK ? parseInt(process.env.DEFAULT_START_WEEK) : 1),
             validate: (input) => {
                 if (input < 0 || input > 52) return 'Please enter 0-52';
                 return true;
@@ -151,7 +154,7 @@ async function interactiveMode() {
     ]);
 
     // Step 6: Repo path  
-    const defaultRepoPath = existingConfig?.repoPath || path.join(process.cwd(), 'art-repo');
+    const defaultRepoPath = existingConfig?.repoPath || process.env.REPO_PATH || path.join(process.cwd(), 'art-repo');
     const { repoPath } = await inquirer.prompt([
         {
             type: 'input',
@@ -167,7 +170,7 @@ async function interactiveMode() {
             type: 'input',
             name: 'repoUrl',
             message: chalk.cyan('Git remote URL (leave empty to skip push):'),
-            default: existingConfig?.repoUrl || '',
+            default: existingConfig?.repoUrl || process.env.REPO_URL || '',
         },
     ]);
 
@@ -185,29 +188,48 @@ async function interactiveMode() {
     let globalBackgroundLevel = null;
     let scrapedExisting = {};
 
-    if (useSolidBg) {
-        const res = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'githubUsername',
-                message: chalk.cyan('Enter your GitHub username (to analyze existing commits):'),
-                default: existingConfig?.githubUsername || '',
-                validate: (input) => input.trim() !== '' ? true : 'Username is required',
+    const res = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'githubUsername',
+            message: chalk.cyan('Enter your GitHub username (to analyze existing commits for perfect intensity level, or press enter to skip):'),
+            default: existingConfig?.githubUsername || process.env.GITHUB_USERNAME || '',
+            validate: (input) => {
+                if (useSolidBg && input.trim() === '') {
+                    return 'Username is required for Solid Background feature';
+                }
+                return true;
             }
-        ]);
-        githubUsername = res.githubUsername.trim();
+        }
+    ]);
+    githubUsername = res.githubUsername.trim();
 
+    if (githubUsername) {
         // Perform scraping
         try {
             const scrapeResult = await scrapeContributions(githubUsername, year);
             scrapedExisting = scrapeResult.days;
-            // Base level: Max commits found + small buffer (e.g. 3) to ensure solid cover
-            globalBackgroundLevel = scrapeResult.maxCommits + 3;
-            console.log(chalk.green(`  ℹ️  Found max ${scrapeResult.maxCommits} commits/day. Setting background baseline to ${globalBackgroundLevel}.`));
+
+            if (useSolidBg) {
+                // Base level: Max commits found + small buffer (e.g. 3) to ensure solid cover
+                globalBackgroundLevel = Math.max(scrapeResult.maxCommits + 3, 4); // ensure at least 4 for math to work
+                // GitHub uses a relative 4-tier color scale based on the absolute maximum for the year.
+                // To force background into Tier 1 (Light Green) and Text into Tier 4 (Darkest Green),
+                // the max must be exactly 4 times the background level.
+                commitsPerPixel = globalBackgroundLevel * 3; // Total target = Base + commitsPerPixel = 4x Base
+
+                console.log(chalk.green(`  ℹ️  Found max ${scrapeResult.maxCommits} commits/day. Setting background baseline to ${globalBackgroundLevel}.`));
+                console.log(chalk.green(`  ✨  Optimizating relative scale: Text intensity dynamically set to +${commitsPerPixel} commits.`));
+            } else {
+                console.log(chalk.green(`  ℹ️  Analyzed existing commits. Text pixels will be normalized perfectly.`));
+            }
+
         } catch (err) {
             console.log(chalk.yellow(`  ⚠️  Failed to fetch existing data: ${err.message}`));
-            console.log(chalk.yellow('  Proceeding with a default baseline of 35 commits.'));
-            globalBackgroundLevel = 35;
+            if (useSolidBg) {
+                console.log(chalk.yellow('  Proceeding with a default baseline of 35 commits.'));
+                globalBackgroundLevel = 35;
+            }
         }
     }
 
