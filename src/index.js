@@ -141,7 +141,21 @@ async function interactiveMode() {
         },
     ]);
 
-    // Step 5: Repo path  
+    // Step 5: Batch Limit
+    const { batchLimit } = await inquirer.prompt([
+        {
+            type: 'number',
+            name: 'batchLimit',
+            message: chalk.cyan('Max commits per run (0 for no limit, 900 to bypass GitHub limits securely):'),
+            default: existingConfig?.batchLimit !== undefined ? existingConfig.batchLimit : 900,
+            validate: (input) => {
+                if (input < 0) return 'Please enter 0 or a positive number';
+                return true;
+            },
+        },
+    ]);
+
+    // Step 6: Repo path  
     const defaultRepoPath = existingConfig?.repoPath || path.join(process.cwd(), 'art-repo');
     const { repoPath } = await inquirer.prompt([
         {
@@ -152,7 +166,7 @@ async function interactiveMode() {
         },
     ]);
 
-    // Step 6: Remote URL
+    // Step 7: Remote URL
     const { repoUrl } = await inquirer.prompt([
         {
             type: 'input',
@@ -171,8 +185,8 @@ async function interactiveMode() {
     console.log(chalk.bold.yellow('  ⚡ Preview of your contribution graph:'));
     renderGrid(grid, year);
     renderStats(stats);
-
-    // Step 7: Confirmation
+    renderStats(stats);
+    // Step 8: Confirmation
     const { confirmed } = await inquirer.prompt([
         {
             type: 'confirm',
@@ -193,6 +207,7 @@ async function interactiveMode() {
         year,
         commitsPerPixel,
         startWeek,
+        batchLimit,
         repoPath,
         repoUrl,
     };
@@ -229,8 +244,18 @@ async function executeCommits(config, plan) {
     // Process each pending date
     let completed = 0;
     const total = pending.length;
+    let commitsThisRun = 0;
+    const batchLimit = config.batchLimit || 0; // 0 means no limit
+    let hitLimit = false;
 
     for (const entry of pending) {
+        if (batchLimit > 0 && commitsThisRun + entry.commits > batchLimit) {
+            console.log(`\n\n  ⏸  ${chalk.yellow('Batch limit of ' + batchLimit + ' reached.')}`);
+            console.log(chalk.gray('      Run ' + chalk.white('npm start') + ' again later to resume the remaining ' + (total - completed) + ' days.'));
+            hitLimit = true;
+            break;
+        }
+
         const progress = Math.round((completed / total) * 100);
         const bar = '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
 
@@ -240,16 +265,21 @@ async function executeCommits(config, plan) {
 
         const commitsMade = makeCommits(repoPath, entry.date, entry.commits, entry.char);
         markCompleted(entry.date, commitsMade, dataDir);
+        commitsThisRun += commitsMade;
         completed++;
     }
 
-    // Final progress
-    process.stdout.write(
-        `\r  [${chalk.green('█'.repeat(20))}] 100% | ${chalk.white('Done!')}${''.padEnd(40)}\n`
-    );
-
-    console.log('');
-    console.log(chalk.green.bold(`  ✅ Completed ${plan.reduce((s, e) => s + e.commits, 0)} commits across ${plan.length} days`));
+    // Final progress if completed fully
+    if (!hitLimit) {
+        process.stdout.write(
+            `\r  [${chalk.green('█'.repeat(20))}] 100% | ${chalk.white('Done!')}${''.padEnd(40)}\n`
+        );
+        console.log('');
+        console.log(chalk.green.bold(`  ✅ Completed all ${plan.reduce((s, e) => s + e.commits, 0)} commits across ${plan.length} days`));
+    } else {
+        console.log('');
+        console.log(chalk.yellow.bold(`  ⏸ Paused after ${commitsThisRun} commits across ${completed} days`));
+    }
 
     // Push to remote
     if (config.repoUrl) {
@@ -282,7 +312,6 @@ async function previewMode() {
 
     renderGrid(grid, config.year);
     renderStats(stats);
-}
 
 // ─── Plan Mode ──────────────────────────────────────────────────────
 async function planMode() {
@@ -317,7 +346,6 @@ async function planMode() {
 
     console.log('');
     renderStats(stats);
-}
 
 // ─── Run Mode (non-interactive, uses saved config) ──────────────────
 async function runMode() {
