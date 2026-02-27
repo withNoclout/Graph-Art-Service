@@ -68,7 +68,7 @@ function makeCommits(repoPath, date, countToMake, totalCount = countToMake, star
 
         try {
             // Append a tiny change
-            const content = `${dateTime} | commit ${i + 1}/${count} for '${charLabel}'\n`;
+            const content = `${dateTime} | commit ${globalIndex + 1}/${totalCount} for '${charLabel}'\n`;
             fs.appendFileSync(artFile, content);
 
             // Stage and commit with specific date
@@ -80,7 +80,7 @@ function makeCommits(repoPath, date, countToMake, totalCount = countToMake, star
 
             committed++;
         } catch (err) {
-            console.error(`  ❌ Failed commit ${i + 1}/${count} for ${date}: ${err.message}`);
+            console.error(`  ❌ Failed commit ${globalIndex + 1}/${totalCount} for ${date}: ${err.message}`);
         }
     }
 
